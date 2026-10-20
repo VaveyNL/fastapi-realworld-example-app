@@ -1,0 +1,29 @@
+FROM python:3.9.18-slim
+
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/opt/venv/bin:$PATH"
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends build-essential libpq-dev \
+ && rm -rf /var/lib/apt/lists/* \
+ && useradd --create-home --uid 10001 appuser
+
+RUN python -m venv /opt/venv
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-compile -r requirements.txt \
+ && pip uninstall -y pip \
+ && find /opt/venv -type d \( -name __pycache__ -o -name tests \) -prune -exec rm -rf {} + \
+ && (find /opt/venv -type f -name '*.so*' -not -path '*.libs/*' -exec strip --strip-unneeded {} + 2>/dev/null || true)
+
+COPY --chown=appuser:appuser alembic.ini ./
+COPY --chown=appuser:appuser app ./app
+
+USER appuser
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
